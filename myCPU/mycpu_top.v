@@ -258,7 +258,7 @@ assign alu_src2 = src2_is_imm ? imm : rkd_value;
 
 alu u_alu(
     .alu_op     (alu_op    ),
-    .alu_src1   (alu_src1  ),
+    .alu_src1   (alu_src1  ),//修改接口问题了
     .alu_src2   (alu_src2  ),
     .alu_result (alu_result)
     );
@@ -278,7 +278,7 @@ assign rf_wdata = final_result;
 
 // debug info generate
 assign debug_wb_pc       = pc;
-assign debug_wb_rf_wen   = {4{rf_we}};
+assign debug_wb_rf_we   = {4{rf_we}};//修改变量名
 assign debug_wb_rf_wnum  = dest;
 assign debug_wb_rf_wdata = final_result;
 
