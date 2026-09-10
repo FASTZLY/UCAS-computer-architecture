@@ -44,7 +44,6 @@ wire [31:0] inst;
 reg  [31:0] pc;
 
 wire [11:0] alu_op;
-wire        load_op;
 wire        src1_is_pc;
 wire        src2_is_imm;
 wire        res_from_mem;
