@@ -26,15 +26,33 @@ module mycpu_top(
 reg         reset;
 always @(posedge clk) reset <= ~resetn;
 
-reg         valid;
+// exp7 第3步：为五级流水建立有效位
+// fs_valid->IF, ds_valid->ID, es_valid->EX, ms_valid->MEM, ws_valid->WB
+// 复位时全部清零；正常运行时逐级传递，用于标记该级内容是否来自一条有效指令。
+reg         fs_valid;
+reg         ds_valid;
+reg         es_valid;
+reg         ms_valid;
+reg         ws_valid;
 always @(posedge clk) begin
     if (reset) begin
-        valid <= 1'b0;
+        fs_valid <= 1'b0;
+        ds_valid <= 1'b0;
+        es_valid <= 1'b0;
+        ms_valid <= 1'b0;
+        ws_valid <= 1'b0;
     end
     else begin
-        valid <= 1'b1;
+        fs_valid <= 1'b1;      // 当前无阻塞、无冲刷，IF 级每拍都在取一条有效指令
+        ds_valid <= fs_valid;
+        es_valid <= ds_valid;
+        ms_valid <= es_valid;
+        ws_valid <= ms_valid;
     end
 end
+
+// 当前组合解码逻辑对应 ID 级指令；保留该别名，避免空泡进入控制副作用。
+wire        id_valid = ds_valid;
 
 wire [31:0] seq_pc;
 wire [31:0] nextpc;
@@ -248,7 +266,7 @@ assign br_taken = (   inst_beq  &&  rj_eq_rd
                    || inst_jirl
                    || inst_bl
                    || inst_b
-                  ) && valid;
+                  ) && id_valid;
 assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (pc + br_offs) :
                                                    /*inst_jirl*/ (rj_value + jirl_offs);
 
@@ -264,14 +282,16 @@ alu u_alu(
 
 // exp7：数据 SRAM 保持选中，执行 st.w 时使能全部四个字节通道。
 assign data_sram_en    = 1'b1;
-assign data_sram_we    = {4{mem_we && valid}};
+// 数据写请求属于当前解码/执行中的指令，空泡不得产生写请求。
+assign data_sram_we    = {4{mem_we && ms_valid}};
 assign data_sram_addr  = alu_result;
 assign data_sram_wdata = rkd_value;
 
 assign mem_result   = data_sram_rdata;
 assign final_result = res_from_mem ? mem_result : alu_result;
 
-assign rf_we    = gr_we && valid;
+// 写回端只有 WB 级有效指令才能更新寄存器。
+assign rf_we    = gr_we && ws_valid;
 assign rf_waddr = dest;
 assign rf_wdata = final_result;
 
