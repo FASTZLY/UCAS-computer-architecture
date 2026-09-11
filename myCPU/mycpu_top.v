@@ -37,6 +37,7 @@ reg         ws_valid;
 reg  [31:0] ifid_pc;
 reg  [31:0] ifid_inst;
 reg  [11:0] idex_alu_op;
+reg  [31:0] idex_pc;
 reg  [31:0] idex_alu_src1;
 reg  [31:0] idex_alu_src2;
 reg  [31:0] idex_store_data;
@@ -51,6 +52,12 @@ reg  [ 4:0] exmem_dest;
 reg         exmem_gr_we;
 reg         exmem_mem_we;
 reg         exmem_res_from_mem;
+reg  [31:0] exmem_pc;
+// MEM/WB 流水寄存器：保存最终写回结果及调试信息。
+reg  [31:0] memwb_pc;
+reg  [31:0] memwb_result;
+reg  [ 4:0] memwb_dest;
+reg         memwb_gr_we;
 always @(posedge clk) begin
     if (reset) begin
         fs_valid <= 1'b0;
@@ -61,6 +68,7 @@ always @(posedge clk) begin
         ifid_pc  <= 32'b0;
         ifid_inst <= 32'b0;
         idex_alu_op <= 12'b0;
+        idex_pc <= 32'b0;
         idex_alu_src1 <= 32'b0;
         idex_alu_src2 <= 32'b0;
         idex_store_data <= 32'b0;
@@ -74,6 +82,11 @@ always @(posedge clk) begin
         exmem_gr_we <= 1'b0;
         exmem_mem_we <= 1'b0;
         exmem_res_from_mem <= 1'b0;
+        exmem_pc <= 32'b0;
+        memwb_pc <= 32'b0;
+        memwb_result <= 32'b0;
+        memwb_dest <= 5'b0;
+        memwb_gr_we <= 1'b0;
     end
     else begin
         fs_valid <= 1'b1;      // 当前无阻塞、无冲刷，IF 级每拍都在取一条有效指令
@@ -85,6 +98,7 @@ always @(posedge clk) begin
         ifid_pc  <= pc;
         ifid_inst <= inst_sram_rdata;
         idex_alu_op <= alu_op;
+        idex_pc <= ifid_pc;
         idex_alu_src1 <= alu_src1;
         idex_alu_src2 <= alu_src2;
         idex_store_data <= rkd_value;
@@ -98,6 +112,11 @@ always @(posedge clk) begin
         exmem_gr_we <= idex_gr_we;
         exmem_mem_we <= idex_mem_we;
         exmem_res_from_mem <= idex_res_from_mem;
+        exmem_pc <= idex_pc;
+        memwb_pc <= exmem_pc;
+        memwb_result <= final_result;
+        memwb_dest <= exmem_dest;
+        memwb_gr_we <= exmem_gr_we;
     end
 end
 
@@ -342,14 +361,14 @@ assign mem_result   = data_sram_rdata;
 assign final_result = exmem_res_from_mem ? mem_result : exmem_alu_result;
 
 // 写回端只有 WB 级有效指令才能更新寄存器。
-assign rf_we    = exmem_gr_we && ws_valid;
-assign rf_waddr = exmem_dest;
-assign rf_wdata = final_result;
+assign rf_we    = memwb_gr_we && ws_valid;
+assign rf_waddr = memwb_dest;
+assign rf_wdata = memwb_result;
 
 // debug info generate
-assign debug_wb_pc       = pc;
+assign debug_wb_pc       = memwb_pc;
 assign debug_wb_rf_we   = {4{rf_we}};//修改变量名
-assign debug_wb_rf_wnum  = dest;
-assign debug_wb_rf_wdata = final_result;
+assign debug_wb_rf_wnum  = memwb_dest;
+assign debug_wb_rf_wdata = memwb_result;
 
 endmodule
