@@ -44,6 +44,13 @@ reg  [ 4:0] idex_dest;
 reg         idex_gr_we;
 reg         idex_mem_we;
 reg         idex_res_from_mem;
+// EX/MEM 流水寄存器：统一保存数据 SRAM 请求所需字段。
+reg  [31:0] exmem_alu_result;
+reg  [31:0] exmem_store_data;
+reg  [ 4:0] exmem_dest;
+reg         exmem_gr_we;
+reg         exmem_mem_we;
+reg         exmem_res_from_mem;
 always @(posedge clk) begin
     if (reset) begin
         fs_valid <= 1'b0;
@@ -61,6 +68,12 @@ always @(posedge clk) begin
         idex_gr_we <= 1'b0;
         idex_mem_we <= 1'b0;
         idex_res_from_mem <= 1'b0;
+        exmem_alu_result <= 32'b0;
+        exmem_store_data <= 32'b0;
+        exmem_dest <= 5'b0;
+        exmem_gr_we <= 1'b0;
+        exmem_mem_we <= 1'b0;
+        exmem_res_from_mem <= 1'b0;
     end
     else begin
         fs_valid <= 1'b1;      // 当前无阻塞、无冲刷，IF 级每拍都在取一条有效指令
@@ -79,6 +92,12 @@ always @(posedge clk) begin
         idex_gr_we <= gr_we;
         idex_mem_we <= mem_we;
         idex_res_from_mem <= res_from_mem;
+        exmem_alu_result <= alu_result;
+        exmem_store_data <= idex_store_data;
+        exmem_dest <= idex_dest;
+        exmem_gr_we <= idex_gr_we;
+        exmem_mem_we <= idex_mem_we;
+        exmem_res_from_mem <= idex_res_from_mem;
     end
 end
 
@@ -313,18 +332,18 @@ alu u_alu(
     );
 
 // exp7：数据 SRAM 保持选中，执行 st.w 时使能全部四个字节通道。
-assign data_sram_en    = 1'b1;
+assign data_sram_en    = ms_valid && (exmem_mem_we || exmem_res_from_mem);
 // 数据写请求属于当前解码/执行中的指令，空泡不得产生写请求。
-assign data_sram_we    = {4{idex_mem_we && ms_valid}};
-assign data_sram_addr  = alu_result;
-assign data_sram_wdata = idex_store_data;
+assign data_sram_we    = {4{exmem_mem_we && ms_valid}};
+assign data_sram_addr  = exmem_alu_result;
+assign data_sram_wdata = exmem_store_data;
 
 assign mem_result   = data_sram_rdata;
-assign final_result = idex_res_from_mem ? mem_result : alu_result;
+assign final_result = exmem_res_from_mem ? mem_result : exmem_alu_result;
 
 // 写回端只有 WB 级有效指令才能更新寄存器。
-assign rf_we    = idex_gr_we && ws_valid;
-assign rf_waddr = idex_dest;
+assign rf_we    = exmem_gr_we && ws_valid;
+assign rf_waddr = exmem_dest;
 assign rf_wdata = final_result;
 
 // debug info generate
