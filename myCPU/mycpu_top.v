@@ -34,6 +34,8 @@ reg         ds_valid;
 reg         es_valid;
 reg         ms_valid;
 reg         ws_valid;
+reg  [31:0] ifid_pc;
+reg  [31:0] ifid_inst;
 always @(posedge clk) begin
     if (reset) begin
         fs_valid <= 1'b0;
@@ -41,6 +43,8 @@ always @(posedge clk) begin
         es_valid <= 1'b0;
         ms_valid <= 1'b0;
         ws_valid <= 1'b0;
+        ifid_pc  <= 32'b0;
+        ifid_inst <= 32'b0;
     end
     else begin
         fs_valid <= 1'b1;      // 当前无阻塞、无冲刷，IF 级每拍都在取一条有效指令
@@ -48,6 +52,9 @@ always @(posedge clk) begin
         es_valid <= ds_valid;
         ms_valid <= es_valid;
         ws_valid <= ms_valid;
+        // Block RAM 同步读：本拍返回的数据对应上一拍发出的 pc 请求。
+        ifid_pc  <= pc;
+        ifid_inst <= inst_sram_rdata;
     end
 end
 
@@ -152,7 +159,8 @@ assign inst_sram_en    = 1'b1;
 assign inst_sram_we    = 4'b0;
 assign inst_sram_addr  = pc;
 assign inst_sram_wdata = 32'b0;
-assign inst            = inst_sram_rdata;
+// ID 级只使用 IF/ID 寄存器中的指令，避免直接使用尚未对齐的 RAM 输出。
+assign inst            = ifid_inst;
 
 assign op_31_26  = inst[31:26];
 assign op_25_22  = inst[25:22];
@@ -267,10 +275,10 @@ assign br_taken = (   inst_beq  &&  rj_eq_rd
                    || inst_bl
                    || inst_b
                   ) && id_valid;
-assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (pc + br_offs) :
+assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (ifid_pc + br_offs) :
                                                    /*inst_jirl*/ (rj_value + jirl_offs);
 
-assign alu_src1 = src1_is_pc  ? pc[31:0] : rj_value;
+assign alu_src1 = src1_is_pc  ? ifid_pc : rj_value;
 assign alu_src2 = src2_is_imm ? imm : rkd_value;
 
 alu u_alu(
