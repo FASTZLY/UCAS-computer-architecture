@@ -203,6 +203,8 @@ wire [31:0] alu_src2   ;
 wire [31:0] alu_result ;
 
 wire [31:0] mem_result;
+// 第8步：分支在 ID 级判定，并将结果反馈到 IF 的 PC 选择器。
+wire        branch_instr;
 
 assign seq_pc       = pc + 32'h4;
 assign nextpc       = br_taken ? br_target : seq_pc;
@@ -331,13 +333,15 @@ assign rj_value  = rf_rdata1;
 assign rkd_value = rf_rdata2;
 
 assign rj_eq_rd = (rj_value == rkd_value);
-assign br_taken = (   inst_beq  &&  rj_eq_rd
-                   || inst_bne  && !rj_eq_rd
-                   || inst_jirl
-                   || inst_bl
-                   || inst_b
-                  ) && id_valid;
-assign br_target = (inst_beq || inst_bne || inst_bl || inst_b) ? (ifid_pc + br_offs) :
+assign branch_instr = inst_beq | inst_bne | inst_jirl | inst_bl | inst_b;
+assign br_taken = id_valid &&
+                  ( (inst_beq  &&  rj_eq_rd)
+                  || (inst_bne  && !rj_eq_rd)
+                  || inst_jirl
+                  || inst_bl
+                  || inst_b );
+// PC 相对分支使用 IF/ID 中保存的 PC；jirl 使用寄存器值加偏移量。
+assign br_target = (branch_instr && !inst_jirl) ? (ifid_pc + br_offs) :
                                                    /*inst_jirl*/ (rj_value + jirl_offs);
 
 assign alu_src1 = src1_is_pc  ? ifid_pc : rj_value;
