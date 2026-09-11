@@ -36,6 +36,14 @@ reg         ms_valid;
 reg         ws_valid;
 reg  [31:0] ifid_pc;
 reg  [31:0] ifid_inst;
+reg  [11:0] idex_alu_op;
+reg  [31:0] idex_alu_src1;
+reg  [31:0] idex_alu_src2;
+reg  [31:0] idex_store_data;
+reg  [ 4:0] idex_dest;
+reg         idex_gr_we;
+reg         idex_mem_we;
+reg         idex_res_from_mem;
 always @(posedge clk) begin
     if (reset) begin
         fs_valid <= 1'b0;
@@ -45,6 +53,14 @@ always @(posedge clk) begin
         ws_valid <= 1'b0;
         ifid_pc  <= 32'b0;
         ifid_inst <= 32'b0;
+        idex_alu_op <= 12'b0;
+        idex_alu_src1 <= 32'b0;
+        idex_alu_src2 <= 32'b0;
+        idex_store_data <= 32'b0;
+        idex_dest <= 5'b0;
+        idex_gr_we <= 1'b0;
+        idex_mem_we <= 1'b0;
+        idex_res_from_mem <= 1'b0;
     end
     else begin
         fs_valid <= 1'b1;      // 当前无阻塞、无冲刷，IF 级每拍都在取一条有效指令
@@ -55,6 +71,14 @@ always @(posedge clk) begin
         // Block RAM 同步读：本拍返回的数据对应上一拍发出的 pc 请求。
         ifid_pc  <= pc;
         ifid_inst <= inst_sram_rdata;
+        idex_alu_op <= alu_op;
+        idex_alu_src1 <= alu_src1;
+        idex_alu_src2 <= alu_src2;
+        idex_store_data <= rkd_value;
+        idex_dest <= dest;
+        idex_gr_we <= gr_we;
+        idex_mem_we <= mem_we;
+        idex_res_from_mem <= res_from_mem;
     end
 end
 
@@ -282,25 +306,25 @@ assign alu_src1 = src1_is_pc  ? ifid_pc : rj_value;
 assign alu_src2 = src2_is_imm ? imm : rkd_value;
 
 alu u_alu(
-    .alu_op     (alu_op    ),
-    .alu_src1   (alu_src1  ),//修改接口问题了
-    .alu_src2   (alu_src2  ),
+    .alu_op     (idex_alu_op),
+    .alu_src1   (idex_alu_src1),
+    .alu_src2   (idex_alu_src2),
     .alu_result (alu_result)
     );
 
 // exp7：数据 SRAM 保持选中，执行 st.w 时使能全部四个字节通道。
 assign data_sram_en    = 1'b1;
 // 数据写请求属于当前解码/执行中的指令，空泡不得产生写请求。
-assign data_sram_we    = {4{mem_we && ms_valid}};
+assign data_sram_we    = {4{idex_mem_we && ms_valid}};
 assign data_sram_addr  = alu_result;
-assign data_sram_wdata = rkd_value;
+assign data_sram_wdata = idex_store_data;
 
 assign mem_result   = data_sram_rdata;
-assign final_result = res_from_mem ? mem_result : alu_result;
+assign final_result = idex_res_from_mem ? mem_result : alu_result;
 
 // 写回端只有 WB 级有效指令才能更新寄存器。
-assign rf_we    = gr_we && ws_valid;
-assign rf_waddr = dest;
+assign rf_we    = idex_gr_we && ws_valid;
+assign rf_waddr = idex_dest;
 assign rf_wdata = final_result;
 
 // debug info generate
