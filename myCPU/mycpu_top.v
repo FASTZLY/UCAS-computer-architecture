@@ -58,6 +58,8 @@ reg  [31:0] memwb_pc;
 reg  [31:0] memwb_result;
 reg  [ 4:0] memwb_dest;
 reg         memwb_gr_we;
+// 同步数据 RAM 返回值寄存器：在 MEM 周期结束时锁存读数据。
+reg  [31:0] mem_rdata_reg;
 always @(posedge clk) begin
     if (reset) begin
         fs_valid <= 1'b0;
@@ -87,6 +89,7 @@ always @(posedge clk) begin
         memwb_result <= 32'b0;
         memwb_dest <= 5'b0;
         memwb_gr_we <= 1'b0;
+        mem_rdata_reg <= 32'b0;
     end
     else begin
         fs_valid <= 1'b1;      // 当前无阻塞、无冲刷，IF 级每拍都在取一条有效指令
@@ -136,6 +139,8 @@ always @(posedge clk) begin
         else begin
             memwb_gr_we <= 1'b0;
         end
+        if (ms_valid && exmem_res_from_mem)
+            mem_rdata_reg <= data_sram_rdata;
     end
 end
 
@@ -380,7 +385,7 @@ assign data_sram_we    = {4{exmem_mem_we && ms_valid}};
 assign data_sram_addr  = exmem_alu_result;
 assign data_sram_wdata = exmem_store_data;
 
-assign mem_result   = data_sram_rdata;
+assign mem_result   = mem_rdata_reg;
 assign final_result = exmem_res_from_mem ? mem_result : exmem_alu_result;
 
 // 写回端只有 WB 级有效指令才能更新寄存器。
