@@ -97,26 +97,45 @@ always @(posedge clk) begin
         // Block RAM 同步读：本拍返回的数据对应上一拍发出的 pc 请求。
         ifid_pc  <= pc;
         ifid_inst <= inst_sram_rdata;
-        idex_alu_op <= alu_op;
-        idex_pc <= ifid_pc;
-        idex_alu_src1 <= alu_src1;
-        idex_alu_src2 <= alu_src2;
-        idex_store_data <= rkd_value;
-        idex_dest <= dest;
-        idex_gr_we <= gr_we;
-        idex_mem_we <= mem_we;
-        idex_res_from_mem <= res_from_mem;
-        exmem_alu_result <= alu_result;
-        exmem_store_data <= idex_store_data;
-        exmem_dest <= idex_dest;
-        exmem_gr_we <= idex_gr_we;
-        exmem_mem_we <= idex_mem_we;
-        exmem_res_from_mem <= idex_res_from_mem;
-        exmem_pc <= idex_pc;
-        memwb_pc <= exmem_pc;
-        memwb_result <= final_result;
-        memwb_dest <= exmem_dest;
-        memwb_gr_we <= exmem_gr_we;
+        if (ds_valid) begin
+            idex_alu_op <= alu_op;
+            idex_pc <= ifid_pc;
+            idex_alu_src1 <= alu_src1;
+            idex_alu_src2 <= alu_src2;
+            idex_store_data <= rkd_value;
+            idex_dest <= dest;
+            idex_gr_we <= gr_we;
+            idex_mem_we <= mem_we;
+            idex_res_from_mem <= res_from_mem;
+        end
+        else begin
+            idex_gr_we <= 1'b0;
+            idex_mem_we <= 1'b0;
+            idex_res_from_mem <= 1'b0;
+        end
+        if (es_valid) begin
+            exmem_alu_result <= alu_result;
+            exmem_store_data <= idex_store_data;
+            exmem_dest <= idex_dest;
+            exmem_gr_we <= idex_gr_we;
+            exmem_mem_we <= idex_mem_we;
+            exmem_res_from_mem <= idex_res_from_mem;
+            exmem_pc <= idex_pc;
+        end
+        else begin
+            exmem_gr_we <= 1'b0;
+            exmem_mem_we <= 1'b0;
+            exmem_res_from_mem <= 1'b0;
+        end
+        if (ms_valid) begin
+            memwb_pc <= exmem_pc;
+            memwb_result <= final_result;
+            memwb_dest <= exmem_dest;
+            memwb_gr_we <= exmem_gr_we;
+        end
+        else begin
+            memwb_gr_we <= 1'b0;
+        end
     end
 end
 
