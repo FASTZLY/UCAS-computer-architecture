@@ -34,6 +34,8 @@ reg         ds_valid;
 reg         es_valid;
 reg         ms_valid;
 reg         ws_valid;
+// 分支在 ID 级确定后，下一拍冲刷已经取到的顺序路径指令。
+reg         branch_flush;
 reg  [31:0] ifid_pc;
 reg  [31:0] ifid_inst;
 reg  [11:0] idex_alu_op;
@@ -67,6 +69,7 @@ always @(posedge clk) begin
         es_valid <= 1'b0;
         ms_valid <= 1'b0;
         ws_valid <= 1'b0;
+        branch_flush <= 1'b0;
         ifid_pc  <= 32'b0;
         ifid_inst <= 32'b0;
         idex_alu_op <= 12'b0;
@@ -93,10 +96,11 @@ always @(posedge clk) begin
     end
     else begin
         fs_valid <= 1'b1;      // 当前无阻塞、无冲刷，IF 级每拍都在取一条有效指令
-        ds_valid <= fs_valid;
+        ds_valid <= fs_valid && !branch_flush && !br_taken;
         es_valid <= ds_valid;
         ms_valid <= es_valid;
         ws_valid <= ms_valid;
+        branch_flush <= br_taken;
         // Block RAM 同步读：本拍返回的数据对应上一拍发出的 pc 请求。
         ifid_pc  <= pc;
         ifid_inst <= inst_sram_rdata;
