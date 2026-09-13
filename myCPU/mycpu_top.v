@@ -34,6 +34,8 @@ reg         ds_valid;
 reg         es_valid;
 reg         ms_valid;
 reg         ws_valid;
+reg         branch_flush;
+reg  [31:0] inst_pc_q;
 // 分支在 ID 级确定后，下一拍冲刷已经取到的顺序路径指令。
 reg         branch_flush;
 reg  [31:0] ifid_pc;
@@ -60,6 +62,7 @@ reg  [31:0] memwb_pc;
 reg  [31:0] memwb_result;
 reg  [ 4:0] memwb_dest;
 reg         memwb_gr_we;
+reg  [31:0] mem_rdata_reg;
 // 同步数据 RAM 返回值寄存器：在 MEM 周期结束时锁存读数据。
 reg  [31:0] mem_rdata_reg;
 always @(posedge clk) begin
@@ -70,6 +73,7 @@ always @(posedge clk) begin
         ms_valid <= 1'b0;
         ws_valid <= 1'b0;
         branch_flush <= 1'b0;
+        inst_pc_q <= 32'b0;
         ifid_pc  <= 32'b0;
         ifid_inst <= 32'b0;
         idex_alu_op <= 12'b0;
@@ -102,7 +106,8 @@ always @(posedge clk) begin
         ws_valid <= ms_valid;
         branch_flush <= br_taken;
         // Block RAM 同步读：本拍返回的数据对应上一拍发出的 pc 请求。
-        ifid_pc  <= pc;
+        inst_pc_q <= pc;
+        ifid_pc  <= inst_pc_q;
         ifid_inst <= inst_sram_rdata;
         if (ds_valid) begin
             idex_alu_op <= alu_op;
@@ -229,8 +234,10 @@ wire [31:0] rf_wdata;
 wire [31:0] alu_src1   ;
 wire [31:0] alu_src2   ;
 wire [31:0] alu_result ;
+wire        rj_eq_rd;
 
 wire [31:0] mem_result;
+wire [31:0] final_result;
 // 第8步：分支在 ID 级判定，并将结果反馈到 IF 的 PC 选择器。
 wire        branch_instr;
 
