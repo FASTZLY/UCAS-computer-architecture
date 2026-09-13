@@ -37,7 +37,6 @@ reg         ws_valid;
 reg         branch_flush;
 reg  [31:0] inst_pc_q;
 // 分支在 ID 级确定后，下一拍冲刷已经取到的顺序路径指令。
-reg         branch_flush;
 reg  [31:0] ifid_pc;
 reg  [31:0] ifid_inst;
 reg  [11:0] idex_alu_op;
@@ -62,7 +61,6 @@ reg  [31:0] memwb_pc;
 reg  [31:0] memwb_result;
 reg  [ 4:0] memwb_dest;
 reg         memwb_gr_we;
-reg  [31:0] mem_rdata_reg;
 // 同步数据 RAM 返回值寄存器：在 MEM 周期结束时锁存读数据。
 reg  [31:0] mem_rdata_reg;
 always @(posedge clk) begin
@@ -148,8 +146,8 @@ always @(posedge clk) begin
         else begin
             memwb_gr_we <= 1'b0;
         end
-        if (ms_valid && exmem_res_from_mem)
-            mem_rdata_reg <= data_sram_rdata;
+        // Sample the synchronous data RAM output every cycle.
+        mem_rdata_reg <= data_sram_rdata;
     end
 end
 
