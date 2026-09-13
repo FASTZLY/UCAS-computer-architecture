@@ -324,7 +324,8 @@ assign src2_is_4  =  inst_jirl | inst_bl;
 
 assign imm = src2_is_4 ? 32'h4                      :
              need_si20 ? {i20[19:0], 12'b0}         :
-/*need_ui5 || need_si12*/{{20{i12[11]}}, i12[11:0]} ;
+             need_ui5  ? {27'b0, i12[4:0]}          :
+                         {{20{i12[11]}}, i12[11:0]} ;
 
 assign br_offs = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
                              {{14{i16[15]}}, i16[15:0], 2'b0} ;
@@ -379,8 +380,12 @@ assign br_taken = id_valid &&
 assign br_target = (branch_instr && !inst_jirl) ? (ifid_pc + br_offs) :
                                                    /*inst_jirl*/ (rj_value + jirl_offs);
 
-assign alu_src1 = src1_is_pc  ? ifid_pc : rj_value;
-assign alu_src2 = src2_is_imm ? imm : rkd_value;
+// The ALU shift operations use src2 as the value and src1[4:0] as the
+// shift amount, so immediate shifts need their operands swapped here.
+assign alu_src1 = need_ui5 ? imm :
+                  src1_is_pc ? ifid_pc : rj_value;
+assign alu_src2 = need_ui5 ? rj_value :
+                  src2_is_imm ? imm : rkd_value;
 
 alu u_alu(
     .alu_op     (idex_alu_op),
