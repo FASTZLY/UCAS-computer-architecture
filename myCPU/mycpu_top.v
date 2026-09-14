@@ -61,12 +61,6 @@ reg  [31:0] memwb_pc;
 reg  [31:0] memwb_result;
 reg  [ 4:0] memwb_dest;
 reg         memwb_gr_we;
-reg  [31:0] mem_rdata_reg;
-// Synchronous data RAM needs one extra cycle before a load can be written back.
-reg         load_wait;
-wire        load_stall = ms_valid && exmem_res_from_mem && !load_wait;
-// 同步数据 RAM 返回值寄存器：在 MEM 周期结束时锁存读数据。
-reg  [31:0] mem_rdata_reg;
 always @(posedge clk) begin
     if (reset) begin
         fs_valid <= 1'b0;
@@ -98,20 +92,8 @@ always @(posedge clk) begin
         memwb_result <= 32'b0;
         memwb_dest <= 5'b0;
         memwb_gr_we <= 1'b0;
-        mem_rdata_reg <= 32'b0;
-        load_wait <= 1'b0;
     end
     else begin
-        if (load_stall) begin
-            // Keep the load request and all pipeline state stable while the
-            // synchronous RAM output becomes valid.
-            load_wait <= 1'b1;
-            // The previous WB result must not be presented again while the
-            // pipeline is held for the load response.
-            ws_valid <= 1'b0;
-        end
-        else begin
-            load_wait <= 1'b0;
         fs_valid <= 1'b1;      // 当前无阻塞、无冲刷，IF 级每拍都在取一条有效指令
         ds_valid <= fs_valid && !branch_flush && !br_taken;
         es_valid <= ds_valid;
@@ -160,9 +142,6 @@ always @(posedge clk) begin
         end
         else begin
             memwb_gr_we <= 1'b0;
-        end
-        // Sample the synchronous data RAM output every cycle.
-        mem_rdata_reg <= data_sram_rdata;
         end
     end
 end
@@ -262,7 +241,7 @@ always @(posedge clk) begin
     if (reset) begin
         pc <= 32'h1bfffffc;     //trick: to make nextpc be 0x1c000000 during reset 
     end
-    else if (!load_stall) begin
+    else begin
         pc <= nextpc;
     end
 end
@@ -409,11 +388,11 @@ alu u_alu(
     );
 
 // exp7：数据 SRAM 保持选中，执行 st.w 时使能全部四个字节通道。
-assign data_sram_en    = ms_valid && (exmem_mem_we || exmem_res_from_mem);
+assign data_sram_en    = es_valid && (idex_mem_we || idex_res_from_mem);
 // 数据写请求属于当前解码/执行中的指令，空泡不得产生写请求。
-assign data_sram_we    = {4{exmem_mem_we && ms_valid}};
-assign data_sram_addr  = exmem_alu_result;
-assign data_sram_wdata = exmem_store_data;
+assign data_sram_we    = {4{es_valid && idex_mem_we}};
+assign data_sram_addr  = alu_result;
+assign data_sram_wdata = idex_store_data;
 
 assign mem_result   = data_sram_rdata;
 assign final_result = exmem_res_from_mem ? mem_result : exmem_alu_result;
