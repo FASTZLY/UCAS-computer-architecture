@@ -1,3 +1,17 @@
 # Vivado/XSim generated simulation outputs
 *.vcd
 *.wdb
+
+# Vivado generated project, cache, and simulation outputs
+soc_verify/soc_bram/run_vivado/project/
+soc_verify/soc_bram/run_vivado/*.jou
+soc_verify/soc_bram/run_vivado/*.log
+soc_verify/soc_bram/run_vivado/*.backup.*
+
+# Generated sources emitted beside Vivado IP definitions
+soc_verify/soc_bram/rtl/xilinx_ip/*/sim/
+soc_verify/soc_bram/rtl/xilinx_ip/*/simulation/
+soc_verify/soc_bram/rtl/xilinx_ip/*/*.xml
+soc_verify/soc_bram/rtl/xilinx_ip/clk_pll/*.v
+soc_verify/soc_bram/rtl/xilinx_ip/clk_pll/*.vh
+soc_verify/soc_bram/rtl/xilinx_ip/inst_ram/*.mif
