@@ -407,7 +407,11 @@ assign hazard_load_use = es_valid && idex_gr_we && idex_res_from_mem &&
                          (idex_dest != 5'd0) &&
                          ((use_rj && (rj == idex_dest)) ||
                           (use_rkd && (rf_raddr2 == idex_dest)));
-assign hazard_stall = id_valid && hazard_load_use;
+assign hazard_stall = id_valid && hazard_load_use
+/*这里就是要插上气泡，我发现按照前递逻辑是没法处理下面的，所以要加气泡
+lw  x1, 0(x2)     load，写 x1
+and x6, x1, x4    读 x1
+*/
 assign br_taken = id_valid && !hazard_stall &&
                   ( (inst_beq  &&  rj_eq_rd)
                   || (inst_bne  && !rj_eq_rd)
