@@ -61,6 +61,24 @@ reg  [31:0] memwb_pc;
 reg  [31:0] memwb_result;
 reg  [ 4:0] memwb_dest;
 reg         memwb_gr_we;
+wire        hazard_stall;
+wire        use_rj;
+wire        use_rkd;
+wire        hazard_ex;
+wire        hazard_mem;
+wire        hazard_wb;
+wire        br_taken;
+reg  [31:0] pc;
+wire [11:0] alu_op;
+wire        res_from_mem;
+wire        gr_we;
+wire        mem_we;
+wire [ 4:0] dest;
+wire [31:0] rkd_value;
+wire [31:0] alu_src1;
+wire [31:0] alu_src2;
+wire [31:0] alu_result;
+wire [31:0] final_result;
 always @(posedge clk) begin
     if (reset) begin
         fs_valid <= 1'b0;
@@ -95,16 +113,16 @@ always @(posedge clk) begin
     end
     else begin
         fs_valid <= 1'b1;      // 当前无阻塞、无冲刷，IF 级每拍都在取一条有效指令
-        ds_valid <= fs_valid && !branch_flush && !br_taken;
-        es_valid <= ds_valid;
+        ds_valid <= hazard_stall ? ds_valid : (fs_valid && !branch_flush && !br_taken);
+        es_valid <= hazard_stall ? 1'b0 : ds_valid;
         ms_valid <= es_valid;
         ws_valid <= ms_valid;
-        branch_flush <= br_taken;
+        branch_flush <= hazard_stall ? 1'b0 : br_taken;
         // Block RAM 同步读：本拍返回的数据对应上一拍发出的 pc 请求。
-        inst_pc_q <= pc;
-        ifid_pc  <= inst_pc_q;
-        ifid_inst <= inst_sram_rdata;
-        if (ds_valid) begin
+        inst_pc_q <= hazard_stall ? inst_pc_q : pc;
+        ifid_pc  <= hazard_stall ? ifid_pc : inst_pc_q;
+        ifid_inst <= hazard_stall ? ifid_inst : inst_sram_rdata;
+        if (ds_valid && !hazard_stall) begin
             idex_alu_op <= alu_op;
             idex_pc <= ifid_pc;
             idex_alu_src1 <= alu_src1;
@@ -151,22 +169,14 @@ wire        id_valid = ds_valid;
 
 wire [31:0] seq_pc;
 wire [31:0] nextpc;
-wire        br_taken;
 wire [31:0] br_target;
 wire [31:0] inst;
-reg  [31:0] pc;
 
-wire [11:0] alu_op;
 wire        src1_is_pc;
 wire        src2_is_imm;
-wire        res_from_mem;
 wire        dst_is_r1;
-wire        gr_we;
-wire        mem_we;
 wire        src_reg_is_rd;
-wire [4: 0] dest;
 wire [31:0] rj_value;
-wire [31:0] rkd_value;
 wire [31:0] imm;
 wire [31:0] br_offs;
 wire [31:0] jirl_offs;
@@ -224,18 +234,14 @@ wire        rf_we   ;
 wire [ 4:0] rf_waddr;
 wire [31:0] rf_wdata;
 
-wire [31:0] alu_src1   ;
-wire [31:0] alu_src2   ;
-wire [31:0] alu_result ;
 wire        rj_eq_rd;
 
 wire [31:0] mem_result;
-wire [31:0] final_result;
 // 第8步：分支在 ID 级判定，并将结果反馈到 IF 的 PC 选择器。
 wire        branch_instr;
 
 assign seq_pc       = pc + 32'h4;
-assign nextpc       = br_taken ? br_target : seq_pc;
+assign nextpc       = hazard_stall ? pc : (br_taken ? br_target : seq_pc);
 
 always @(posedge clk) begin
     if (reset) begin
@@ -247,7 +253,9 @@ always @(posedge clk) begin
 end
 
 // exp7：指令 SRAM 保持选中，指令写使能保持关闭。
-assign inst_sram_en    = 1'b1;
+// Hold the synchronous instruction RAM output together with PC/IFID while ID
+// is stalled, so the pending instruction is not overwritten or misaligned.
+assign inst_sram_en    = !hazard_stall;
 assign inst_sram_we    = 4'b0;
 assign inst_sram_addr  = pc;
 assign inst_sram_wdata = 32'b0;
@@ -363,7 +371,26 @@ assign rkd_value = rf_rdata2;
 
 assign rj_eq_rd = (rj_value == rkd_value);
 assign branch_instr = inst_beq | inst_bne | inst_jirl | inst_bl | inst_b;
-assign br_taken = id_valid &&
+// Only source fields actually consumed by the decoded instruction take part
+// in hazard detection.  Register zero never creates a dependency.
+assign use_rj = inst_add_w | inst_sub_w | inst_slt | inst_sltu |
+                inst_nor | inst_and | inst_or | inst_xor |
+                inst_slli_w | inst_srli_w | inst_srai_w | inst_addi_w |
+                inst_ld_w | inst_st_w | inst_jirl | inst_beq | inst_bne;
+assign use_rkd = inst_add_w | inst_sub_w | inst_slt | inst_sltu |
+                 inst_nor | inst_and | inst_or | inst_xor |
+                 inst_st_w | inst_beq | inst_bne;
+assign hazard_ex  = es_valid && idex_gr_we && (idex_dest != 5'd0) &&
+                    ((use_rj && (rj == idex_dest)) ||
+                     (use_rkd && (rf_raddr2 == idex_dest)));
+assign hazard_mem = ms_valid && exmem_gr_we && (exmem_dest != 5'd0) &&
+                    ((use_rj && (rj == exmem_dest)) ||
+                     (use_rkd && (rf_raddr2 == exmem_dest)));
+assign hazard_wb  = ws_valid && memwb_gr_we && (memwb_dest != 5'd0) &&
+                    ((use_rj && (rj == memwb_dest)) ||
+                     (use_rkd && (rf_raddr2 == memwb_dest)));
+assign hazard_stall = id_valid && (hazard_ex || hazard_mem || hazard_wb);
+assign br_taken = id_valid && !hazard_stall &&
                   ( (inst_beq  &&  rj_eq_rd)
                   || (inst_bne  && !rj_eq_rd)
                   || inst_jirl

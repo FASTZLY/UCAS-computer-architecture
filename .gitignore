@@ -1,0 +1,3 @@
+# Vivado/XSim simulation waveform outputs
+soc_verify/soc_bram/run_vivado/project/loongson.sim/sim_1/behav/xsim/*.vcd
+soc_verify/soc_bram/run_vivado/project/loongson.sim/sim_1/behav/xsim/*.wdb
