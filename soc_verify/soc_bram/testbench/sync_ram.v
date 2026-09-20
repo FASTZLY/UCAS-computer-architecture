@@ -19,11 +19,9 @@ module sync_ram #(
   input wire en;
 
   output reg  [DATA_WIDTH-1:0] rdata;
-  input  wire [DATA_WIDTH-1:0] wdata;
+  output wire [DATA_WIDTH-1:0] wdata;
 
   reg [DATA_WIDTH-1:0] ram[DEPTH];
-
-  initial rdata = {DATA_WIDTH{1'b0}};
 
   genvar i;
   for (i = 0; i < NUM_BYTES; i = i + 1) begin
@@ -63,9 +61,6 @@ module inst_ram #(
   );
   initial begin
     $readmemb("../../../../../../../../func/obj/inst_ram.mif", sync_ram.ram);
-    // The CPU requests reset PC 0x1bfffffc before the first real instruction.
-    // Model the otherwise unused last ROM word as a NOP instead of X.
-    sync_ram.ram[DEPTH-1] = 32'h02800000;
   end
 endmodule
 
